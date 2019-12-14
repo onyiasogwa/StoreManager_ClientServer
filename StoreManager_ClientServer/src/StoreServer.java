@@ -1,97 +1,114 @@
 import com.google.gson.Gson;
 
 import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Scanner;
 
 public class StoreServer {
-    static Gson gson = new Gson();
     static String dbfile = "C:\\Users\\onyie\\IdeaProjects\\StoreManager_ClientServer\\src\\store.db";
-    static IDataAccess dao = new SQLiteDataAdapter(dbfile);
 
     public static void main(String[] args) {
-        int port = 10000;
-        try {
-            ServerSocket server = new ServerSocket(port);
-            while (true) {
-                try {
-                    Socket pipe = server.accept();
-                    Scanner in = new Scanner(pipe.getInputStream());
-                    PrintWriter out = new PrintWriter(pipe.getOutputStream(), true);
 
-                    String msg = in.nextLine();
-                    MessageModel request = gson.fromJson(msg, MessageModel.class);
-                    String res = gson.toJson(process(request));
-                    out.println(res);
-                    System.out.println("Response to client: " + res);
-                    pipe.close(); // close this socket!!!
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    break;
+        HashMap<Integer, UserModel> activeUsers = new HashMap<Integer, UserModel>();
+
+        int totalActiveUsers = 0;
+
+        int port = 1000;
+
+        if (args.length > 0) {
+            System.out.println("Running arguments: ");
+            for (String arg : args)
+                System.out.println(arg);
+            port = Integer.parseInt(args[0]);
+            dbfile = args[1];
+        }
+
+        try {
+            SQLiteDataAdapter adapter = new SQLiteDataAdapter();
+            Gson gson = new Gson();
+            adapter.connect(dbfile);
+
+            ServerSocket server = new ServerSocket(port);
+
+            System.out.println("Server is listening at port = " + port);
+
+            while (true) {
+                Socket pipe = server.accept();
+                PrintWriter out = new PrintWriter(pipe.getOutputStream(), true);
+                Scanner in = new Scanner(pipe.getInputStream());
+
+                MessageModel msg = gson.fromJson(in.nextLine(), MessageModel.class);
+
+                if (msg.code == MessageModel.GET_PRODUCT) {
+                    System.out.println("GET product with id = " + msg.data);
+                    ProductModel p = adapter.loadProduct(Integer.parseInt(msg.data));
+                    if (p == null) {
+                        msg.code = MessageModel.OPERATION_FAILED;
+                    }
+                    else {
+                        msg.code = MessageModel.OPERATION_OK; // load successfully!!!
+                        msg.data = gson.toJson(p);
+                    }
+                    out.println(gson.toJson(msg));
                 }
+
+                if (msg.code == MessageModel.PUT_PRODUCT) {
+                    ProductModel p = gson.fromJson(msg.data, ProductModel.class);
+                    System.out.println("PUT command with Product = " + p);
+                    int res = adapter.saveProduct(p);
+                    if (res == IDataAdapter.PRODUCT_SAVE_OK) {
+                        msg.code = MessageModel.OPERATION_OK;
+                    }
+                    else {
+                        msg.code = MessageModel.OPERATION_FAILED;
+                    }
+                    out.println(gson.toJson(msg));
+                }
+
+                if (msg.code == MessageModel.LOGIN) {
+                    UserModel u = gson.fromJson(msg.data, UserModel.class);
+                    System.out.println("LOGIN command with User = " + u);
+                    UserModel user = adapter.loadUser(u.mUsername);
+                    if (user != null && user.mPassword.equals(u.mPassword)) {
+                        msg.code = MessageModel.OPERATION_OK;
+                        totalActiveUsers++;
+                        int accessToken = totalActiveUsers;
+                        msg.ssid = accessToken;
+                        msg.data = gson.toJson(user, UserModel.class);
+                        activeUsers.put(accessToken, user);
+                    }
+                    else {
+                        msg.code = MessageModel.OPERATION_FAILED;
+                    }
+                    out.println(gson.toJson(msg));  // answer login command!
+                }
+
+                if (msg.code == MessageModel.GET_PURCHASE_LIST) {
+                    int id = Integer.parseInt(msg.data);
+                    PurchaseListModel res = adapter.loadPurchaseHistory(id);
+                    msg.code = MessageModel.OPERATION_OK;
+                    msg.data = gson.toJson(res);
+                    out.println(gson.toJson(msg));  // answer get purchase history!!!
+                }
+
+                if (msg.code == MessageModel.SEARCH_PRODUCT) {
+                    SearchProductParamModel model = new SearchProductParamModel();
+                    model = gson.fromJson(msg.data, SearchProductParamModel.class);
+                    ProductListModel res = adapter.searchProduct(model.mName, model.minPrice, model.maxPrice);
+                    msg.code = MessageModel.OPERATION_OK;
+                    msg.data = gson.toJson(res);
+                    out.println(gson.toJson(msg));  // answer get purchase history!!!
+                }
+
+
+                // add responding to GET_USER, PUT_USER,...
             }
-            server.close();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private static MessageModel process(MessageModel request) {
-        if (request.code == MessageModel.GET_PRODUCT) {
-            int id = Integer.parseInt(request.data);
-            System.out.println("GET command from Client with id = " + id);
-            ProductModel model = dao.loadProduct(id);
-            if (model == null)
-                return new MessageModel(IDataAccess.PRODUCT_LOAD_ID_NOT_FOUND, null);
-            else
-                return new MessageModel(IDataAccess.PRODUCT_LOAD_OK,gson.toJson(model));
-        }
-        if (request.code == MessageModel.PUT_PRODUCT) {
-            ProductModel model = gson.fromJson(request.data, ProductModel.class);
-            System.out.println("PUT command from Client with product = " + model);
-            boolean saved = dao.saveProduct(model);
-            if (saved) // save successfully!
-                return new MessageModel(IDataAccess.PRODUCT_SAVE_OK, null);
-            else
-                return new MessageModel(IDataAccess.PRODUCT_SAVE_FAILED, null);
-        }
-        if (request.code == MessageModel.GET_CUSTOMER) {
-            int id = Integer.parseInt(request.data);
-            System.out.println("GET command from Client with id = " + id);
-            CustomerModel model = dao.loadCustomer(id);
-            if (model == null)
-                return new MessageModel(IDataAccess.CUSTOMER_LOAD_ID_NOT_FOUND, null);
-            else
-                return new MessageModel(IDataAccess.CUSTOMER_LOAD_OK,gson.toJson(model));
-        }
-        if (request.code == MessageModel.PUT_CUSTOMER) {
-            CustomerModel customerModel = gson.fromJson(request.data, CustomerModel.class);
-            System.out.println("PUT command from Client with customer = " + customerModel);
-            boolean saved = dao.saveCustomer(customerModel);
-            if (saved) // save successfully!
-                return new MessageModel(IDataAccess.CUSTOMER_SAVE_OK, null);
-            else
-                return new MessageModel(IDataAccess.CUSTOMER_SAVE_FAILED, null);
-        }
-        if (request.code == MessageModel.GET_ORDER) {
-            int id = Integer.parseInt(request.data);
-            System.out.println("GET command from Client with id = " + id);
-            PurchaseModel model = dao.loadPurchase(id);
-            if (model == null)
-                return new MessageModel(IDataAccess.ORDER_LOAD_ID_NOT_FOUND, null);
-            else
-                return new MessageModel(IDataAccess.ORDER_LOAD_OK,gson.toJson(model));
-        }
-        if (request.code == MessageModel.PUT_ORDER) {
-            PurchaseModel purchaseModel = gson.fromJson(request.data, PurchaseModel.class);
-            System.out.println("PUT command from Client with purchase = " + purchaseModel);
-            boolean saved = dao.savePurchase(purchaseModel);
-            if (saved) // save successfully!
-                return new MessageModel(IDataAccess.ORDER_SAVE_OK, null);
-            else
-                return new MessageModel(IDataAccess.ORDER_SAVE_FAILED, null);
-        }
-        return null;
-    }
 }

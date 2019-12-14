@@ -4,57 +4,55 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
 public class ManageProductUI {
+
     public JFrame view;
+
+    public JButton btnLoad = new JButton("Load Product");
+    public JButton btnSave = new JButton("Save Product");
+
     public JTextField txtProductID = new JTextField(20);
     public JTextField txtName = new JTextField(20);
     public JTextField txtPrice = new JTextField(20);
     public JTextField txtQuantity = new JTextField(20);
-    public JTextField txtVendor = new JTextField(20);
-
-    public JButton btnLoad = new JButton("Load");
-    public JButton btnSave = new JButton("Save");
 
 
     public ManageProductUI() {
-        view = new JFrame();
-        view.setTitle("Manage Products");
-        view.setSize(600, 400);
+        this.view = new JFrame();
+
         view.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
-        Container pane = view.getContentPane();
-        pane.setLayout(new BoxLayout(pane, BoxLayout.PAGE_AXIS));
+        view.setTitle("Update Product Information");
+        view.setSize(600, 400);
+        view.getContentPane().setLayout(new BoxLayout(view.getContentPane(), BoxLayout.PAGE_AXIS));
 
-        JPanel buttonPane = new JPanel(new FlowLayout());
-        buttonPane.add(btnLoad);
-        buttonPane.add(btnSave);
-        pane.add(buttonPane);
+        JPanel panelButtons = new JPanel(new FlowLayout());
+        panelButtons.add(btnLoad);
+        panelButtons.add(btnSave);
+        view.getContentPane().add(panelButtons);
 
-        JPanel line = new JPanel(new FlowLayout());
-        line.add(new JLabel("ProductID:"));
-        line.add(txtProductID);
-        pane.add(line);
+        JPanel line1 = new JPanel(new FlowLayout());
+        line1.add(new JLabel("ProductID "));
+        line1.add(txtProductID);
+        view.getContentPane().add(line1);
 
-        line = new JPanel(new FlowLayout());
-        line.add(new JLabel("Name:"));
-        line.add(txtName);
-        pane.add(line);
+        JPanel line2 = new JPanel(new FlowLayout());
+        line2.add(new JLabel("Name "));
+        line2.add(txtName);
+        view.getContentPane().add(line2);
 
-        line = new JPanel(new FlowLayout());
-        line.add(new JLabel("Price:"));
-        line.add(txtPrice);
-        pane.add(line);
+        JPanel line3 = new JPanel(new FlowLayout());
+        line3.add(new JLabel("Price "));
+        line3.add(txtPrice);
+        view.getContentPane().add(line3);
 
-        line = new JPanel(new FlowLayout());
-        line.add(new JLabel("Quantity:"));
-        line.add(txtQuantity);
-        pane.add(line);
+        JPanel line4 = new JPanel(new FlowLayout());
+        line4.add(new JLabel("Quantity "));
+        line4.add(txtQuantity);
+        view.getContentPane().add(line4);
 
-        line = new JPanel(new FlowLayout());
-        line.add(new JLabel("Vendor:"));
-        line.add(txtVendor);
-        pane.add(line);
 
-        btnLoad.addActionListener(new LoadButtonListener());
+        btnLoad.addActionListener(new LoadButtonListerner());
+
         btnSave.addActionListener(new SaveButtonListener());
 
     }
@@ -63,35 +61,36 @@ public class ManageProductUI {
         view.setVisible(true);
     }
 
-    private class LoadButtonListener implements ActionListener {
+    class LoadButtonListerner implements ActionListener {
+
         @Override
         public void actionPerformed(ActionEvent actionEvent) {
             ProductModel product = new ProductModel();
-            String s = txtProductID.getText();
-            if (s.length() == 0) {
-                JOptionPane.showMessageDialog(null,
-                        "ProductID could not be EMPTY!!!");
+            String id = txtProductID.getText();
+
+            if (id.length() == 0) {
+                JOptionPane.showMessageDialog(null, "ProductID cannot be null!");
                 return;
             }
+
             try {
-                product.mProductID = Integer.parseInt(s);
-            }
-            catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(null,
-                        "ProductID is INVALID (not a number)!!!");
+                product.mProductID = Integer.parseInt(id);
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(null, "ProductID is invalid!");
                 return;
             }
-            IDataAccess adapter = StoreClient.getInstance().getDataAccess();
-            product = adapter.loadProduct(product.mProductID);
+
+            // call data access!
+
+            product = StoreClient.getInstance().getDataAdapter().loadProduct(product.mProductID);
+
             if (product == null) {
-                JOptionPane.showMessageDialog(null,
-                        "Product does NOT exist!");
-                return;
+                JOptionPane.showMessageDialog(null, "Product NOT exists!");
+            } else {
+                txtName.setText(product.mName);
+                txtPrice.setText(Double.toString(product.mPrice));
+                txtQuantity.setText(Double.toString(product.mQuantity));
             }
-            txtName.setText(product.mName);
-            txtPrice.setText(Double.toString(product.mPrice));
-            txtQuantity.setText(Double.toString(product.mQuantity));
-            txtVendor.setText(product.mVendor);
         }
     }
 
@@ -99,74 +98,51 @@ public class ManageProductUI {
         @Override
         public void actionPerformed(ActionEvent actionEvent) {
             ProductModel product = new ProductModel();
-            String s = txtProductID.getText();
-            if (s.length() == 0) {
-                JOptionPane.showMessageDialog(null,
-                        "ProductID could not be EMPTY!!!");
-                return;
-            }
-            try {
-                product.mProductID = Integer.parseInt(s);
-            }
-            catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(null,
-                        "ProductID is INVALID (not a number)!!!");
-                return;
-            }
+            String id = txtProductID.getText();
 
-            s = txtName.getText();
-            if (s.length() == 0) {
-                JOptionPane.showMessageDialog(null,
-                        "Product Name could not be EMPTY!!!");
-                return;
-            }
-            product.mName = s;
-
-            s = txtPrice.getText();
-            if (s.length() == 0) {
-                JOptionPane.showMessageDialog(null,
-                        "Price could not be EMPTY!!!");
+            if (id.length() == 0) {
+                JOptionPane.showMessageDialog(null, "ProductID cannot be null!");
                 return;
             }
 
             try {
-                product.mPrice = Double.parseDouble(s);
+                product.mProductID = Integer.parseInt(id);
             } catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(null,
-                        "Price is INVALID (not a number)!!!");
+                JOptionPane.showMessageDialog(null, "ProductID is invalid!");
                 return;
             }
 
-            s = txtQuantity.getText();
-            if (s.length() == 0) {
-                JOptionPane.showMessageDialog(null,
-                        "Quantity could not be EMPTY!!!");
+            String name = txtName.getText();
+            if (name.length() == 0) {
+                JOptionPane.showMessageDialog(null, "Product name cannot be empty!");
                 return;
             }
 
+            product.mName = name;
+
+            String price = txtPrice.getText();
             try {
-                product.mQuantity = Double.parseDouble(s);
+                product.mPrice = Double.parseDouble(price);
             } catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(null,
-                        "Quantity is INVALID (not a number)!!!");
+                JOptionPane.showMessageDialog(null, "Price is invalid!");
                 return;
             }
 
-            s = txtVendor.getText();
-            if (s.length() == 0) {
-                JOptionPane.showMessageDialog(null,
-                        "Vendor could not be EMPTY!!!");
+            String quant = txtQuantity.getText();
+            try {
+                product.mQuantity = Double.parseDouble(quant);
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(null, "Quantity is invalid!");
                 return;
             }
-            product.mVendor = s;
 
-            IDataAccess adapter = StoreClient.getInstance().getDataAccess();
-            if (adapter.saveProduct(product))
-                JOptionPane.showMessageDialog(null,
-                        "Product is saved successfully!");
-            else {
-                System.out.println(adapter.getErrorMessage());
-            }
+
+            int  res = StoreClient.getInstance().getDataAdapter().saveProduct(product);
+
+            if (res == IDataAdapter.PRODUCT_SAVE_FAILED)
+                JOptionPane.showMessageDialog(null, "Product is NOT saved successfully!");
+            else
+                JOptionPane.showMessageDialog(null, "Product is SAVED successfully!");
         }
     }
 }

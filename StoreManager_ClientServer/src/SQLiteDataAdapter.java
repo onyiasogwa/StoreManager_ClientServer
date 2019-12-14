@@ -1,180 +1,199 @@
+
 import java.sql.Connection;
 import java.sql.Statement;
 import java.sql.ResultSet;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
-public class SQLiteDataAdapter implements IDataAccess {
-    String url = null;
+public class SQLiteDataAdapter implements IDataAdapter {
+
     Connection conn = null;
-    int errorCode = 0;
 
-    public SQLiteDataAdapter(String path) {
-        url = "jdbc:sqlite:" + path;
-    }
-
-    public boolean connect(String path) {
+    public int connect(String dbfile) {
         try {
+            // db parameters
+            String url = "jdbc:sqlite:" + dbfile;
+            // create a connection to the database
             conn = DriverManager.getConnection(url);
-            return true;
 
-        } catch (Exception e) {
+            System.out.println("Connection to SQLite has been established.");
+
+        } catch (SQLException e) {
             System.out.println(e.getMessage());
-            errorCode = CONNECTION_OPEN_FAILED;
-            return false;
+            return CONNECTION_OPEN_FAILED;
         }
-
+        return CONNECTION_OPEN_OK;
     }
 
     @Override
-    public boolean disconnect() {
-        return true;
-    }
-
-    @Override
-    public int getErrorCode() {
-        return errorCode;
-    }
-
-    @Override
-    public String getErrorMessage() {
-        switch (errorCode) {
-            case CONNECTION_OPEN_FAILED:
-                return "Connection is not opened!";
-            case PRODUCT_LOAD_FAILED:
-                return "Cannot load the product!";
+    public int disconnect() {
+        try {
+            conn.close();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+            return CONNECTION_CLOSE_FAILED;
         }
-        ;
-        return "OK";
+        return CONNECTION_CLOSE_OK;
     }
 
     public ProductModel loadProduct(int productID) {
         ProductModel product = null;
+
         try {
-            conn = DriverManager.getConnection(url);
+            String sql = "SELECT ProductId, Name, Price, Quantity FROM Products WHERE ProductId = " + productID;
             Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM Products WHERE ProductId = " + productID);
+            ResultSet rs = stmt.executeQuery(sql);
             if (rs.next()) {
                 product = new ProductModel();
                 product.mProductID = rs.getInt("ProductId");
                 product.mName = rs.getString("Name");
                 product.mPrice = rs.getDouble("Price");
                 product.mQuantity = rs.getDouble("Quantity");
-                product.mVendor = rs.getString("Vendor");
             }
-            rs.close();
-            stmt.close();
-            conn.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            errorCode = PRODUCT_LOAD_FAILED;
+
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
         return product;
     }
-
-    public boolean saveProduct(ProductModel product) {
+    public int saveProduct(ProductModel product) {
         try {
-            conn = DriverManager.getConnection(url);
-            ProductModel model = loadProduct(product.mProductID);
             Statement stmt = conn.createStatement();
-            if (model != null)  // delete this record
-                stmt.execute("DELETE FROM Products WHERE ProductId = " + product.mProductID);
-            stmt.execute("INSERT INTO Products(ProductId, Name, Price, Quantity, Vendor) " +
-                            "VALUES('"+product.mProductID+"','"+product.mName+"','"+product.mPrice+"','"+product.mQuantity+"','"+product.mVendor+"')");
-            stmt.close();
-            conn.close();
+            ProductModel p = loadProduct(product.mProductID); // check if this product exists
+            if (p != null) {
+                stmt.executeUpdate("DELETE FROM Products WHERE ProductID = " + product.mProductID);
+            }
+
+            String sql = "INSERT INTO Products(ProductId, Name, Price, Quantity) VALUES " + product;
+            System.out.println(sql);
+
+            stmt.executeUpdate(sql);
+
+        } catch (Exception e) {
+            String msg = e.getMessage();
+            System.out.println(msg);
+            if (msg.contains("UNIQUE constraint failed"))
+                return PRODUCT_SAVE_FAILED;
+        }
+
+        return PRODUCT_SAVE_OK;
+    }
+
+    @Override
+    public int savePurchase(PurchaseModel purchase) {
+        try {
+            String sql = "INSERT INTO Purchases VALUES " + purchase;
+            System.out.println(sql);
+            Statement stmt = conn.createStatement();
+            stmt.executeUpdate(sql);
+
+        } catch (Exception e) {
+            String msg = e.getMessage();
+            System.out.println(msg);
+            if (msg.contains("UNIQUE constraint failed"))
+                return PURCHASE_SAVE_FAILED;
+        }
+
+        return PURCHASE_SAVE_OK;
+
+    }
+
+    @Override
+    public PurchaseListModel loadPurchaseHistory(int id) {
+        PurchaseListModel res = new PurchaseListModel();
+        try {
+            String sql = "SELECT * FROM Purchases WHERE CustomerId = " + id;
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            while (rs.next()) {
+                PurchaseModel purchase = new PurchaseModel();
+                purchase.mCustomerID = id;
+                purchase.mPurchaseID = rs.getInt("PurchaseID");
+                purchase.mProductID = rs.getInt("ProductID");
+                purchase.mPrice = rs.getDouble("Price");
+                purchase.mQuantity = rs.getDouble("Quantity");
+                purchase.mCost = rs.getDouble("Cost");
+                purchase.mTax = rs.getDouble("Tax");
+                purchase.mTotal = rs.getDouble("Total");
+                purchase.mDate = rs.getString("Date");
+
+                res.purchases.add(purchase);
+            }
+
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            errorCode = PRODUCT_LOAD_FAILED;
-            return false;
         }
-        return true;
+        return res;
+    }
+
+    @Override
+    public ProductListModel searchProduct(String name, double minPrice, double maxPrice) {
+        ProductListModel res = new ProductListModel();
+        try {
+            String sql = "SELECT * FROM Products WHERE Name LIKE \'%" + name + "%\' "
+                    + "AND Price >= " + minPrice + " AND Price <= " + maxPrice;
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            while (rs.next()) {
+                ProductModel product = new ProductModel();
+                product.mProductID = rs.getInt("ProductID");
+                product.mName = rs.getString("Name");
+                product.mPrice = rs.getDouble("Price");
+                product.mQuantity = rs.getDouble("Quantity");
+                res.products.add(product);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return res;
     }
 
     public CustomerModel loadCustomer(int id) {
-        try {
-            conn = DriverManager.getConnection(url);
-            CustomerModel c = new CustomerModel();
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM Customers WHERE CustomerID = " + id);
-            c.mCustomerID = rs.getInt("CustomerID");
-            c.mName = rs.getString("Name");
-            c.mPhone = rs.getString("Phone");
-            c.mAddress = rs.getString("Address");
-            stmt.close();
-            conn.close();
-            return c;
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            errorCode = CUSTOMER_LOAD_FAILED;
-            return null;
-        }
-    }
+        CustomerModel customer = null;
 
-    public boolean saveCustomer(CustomerModel customer) {
         try {
-            CustomerModel model = loadCustomer(customer.mCustomerID);
-            conn = DriverManager.getConnection(url);
+            String sql = "SELECT * FROM Customers WHERE CustomerId = " + id;
             Statement stmt = conn.createStatement();
-            if (model != null)  // delete this record
-                stmt.execute("DELETE FROM Customers WHERE CustomerId = " + customer.mCustomerID);
-            stmt.execute("INSERT INTO Customers (CustomerId, Name, Phone, Address) " +
-                    "VALUES('"+customer.mCustomerID+"','"+customer.mName+"','"+customer.mPhone+"','"+customer.mAddress+"')");
-            stmt.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            errorCode = CUSTOMER_LOAD_FAILED;
-            return false;
-        }
-        return true;
-    }
-
-    @Override
-    public PurchaseModel loadPurchase(Integer mPurchaseID) {
-        PurchaseModel purchaseModel = null;
-        try {
-            conn = DriverManager.getConnection(url);
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM Orders WHERE OrderId = " + mPurchaseID);
+            ResultSet rs = stmt.executeQuery(sql);
             if (rs.next()) {
-                purchaseModel = new PurchaseModel();
-                purchaseModel.mProductID = rs.getInt("ProductId");
-                purchaseModel.mCustomerID = rs.getInt("CustomerId");
-                purchaseModel.mPrice = rs.getDouble("Price");
-                purchaseModel.mQuantity = rs.getInt("Quantity");
-                purchaseModel.mTotalCost = rs.getInt("TotalCost");
-                purchaseModel.mTax = rs.getInt("TotalTax");
+                customer = new CustomerModel();
+                customer.mCustomerID = id;
+                customer.mName = rs.getString("Name");
+                customer.mPhone = rs.getString("Phone");
+                customer.mAddress = rs.getString("Address");
             }
-            rs.close();
-            stmt.close();
-            conn.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            errorCode = PRODUCT_LOAD_FAILED;
-        }
-        return purchaseModel;
-    }
 
-    @Override
-    public boolean savePurchase(PurchaseModel purchaseModel) {
-        try {
-            PurchaseModel model = loadPurchase(purchaseModel.mPurchaseID);
-            conn = DriverManager.getConnection(url);
-            Statement stmt = conn.createStatement();
-            if (model != null)  // delete this record
-                stmt.execute("DELETE FROM Orders WHERE OrderId = " + purchaseModel.mPurchaseID);
-            stmt.execute("INSERT INTO Orders (OrderId, CustomerId, ProductId, Quantity, Price, TotalTax, TotalCost, Date) " +
-                    "VALUES('"+purchaseModel.mPurchaseID+"','"+purchaseModel.mCustomerID+"','"+purchaseModel.mProductID+"','"+purchaseModel.mQuantity+"','"+purchaseModel.mPrice+"','"+purchaseModel.mTax+"','"+purchaseModel.mTotalCost+"','"+purchaseModel.mDate+"')");
-            stmt.close();
-            conn.close();
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            errorCode = CUSTOMER_LOAD_FAILED;
-            return false;
         }
-        return true;
+        return customer;
+    }
+
+    public UserModel loadUser(String username) {
+        UserModel user = null;
+
+        try {
+            String sql = "SELECT * FROM Users WHERE Username = \"" + username + "\"";
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            if (rs.next()) {
+                user = new UserModel();
+                user.mUsername = username;
+                user.mPassword = rs.getString("Password");
+                user.mFullname = rs.getString("Fullname");
+                user.mUserType = rs.getInt("Usertype");
+                if (user.mUserType == UserModel.CUSTOMER)
+                    user.mCustomerID = rs.getInt("CustomerID");
+            }
+
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+        return user;
     }
 
 }
